@@ -27,3 +27,5 @@ Create Classic token,and Do The 2FA if its enabled/Ask's
 ╚══════════════════════════════════╝
 ## MyDiscord
 @keegan_nebula.cc_31
+## Disclaimer
+Im Not Responsible At All For This Tool's Usage
