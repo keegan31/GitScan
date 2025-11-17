@@ -6,7 +6,7 @@ import sys
 import time
 import os
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import argparse
 from colorama import Fore, Style, init
@@ -31,24 +31,25 @@ class GitScan:
             'user_info': {}
         }
         self.lock = threading.Lock()
+        self.scan_complete = False
 
     def print_banner(self):
         banner = f"""
         {Fore.MAGENTA}
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣠⣤⣤⣶⣶⣶⣤⣤⣄⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⢀⣤⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣄⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⣠⣶⣿⣿⡿⣿⣿⣿⡿⠋⠉⠀⠀⠉⠙⢿⣿⣿⡿⣿⣿⣷⣦⡀⠀⠀⠀
-⠀⢀⣼⣿⣿⠟⠁⢠⣿⣿⠏⠀⠀⢠⣤⣤⡀⠀⠀⢻⣿⣿⡀⠙⢿⣿⣿⣦⠀⠀
-⣰⣿⣿⡟⠁⠀⠀⢸⣿⣿⠀⠀⠀⢿⣿⣿⡟⠀⠀⠈⣿⣿⡇⠀⠀⠙⣿⣿⣷⡄
-⠈⠻⣿⣿⣦⣄⠀⠸⣿⣿⣆⠀⠀⠀⠉⠉⠀⠀⠀⣸⣿⣿⠃⢀⣤⣾⣿⣿⠟⠁
-⠀⠀⠈⠻⣿⣿⣿⣶⣿⣿⣿⣦⣄⠀⠀⠀⢀⣠⣾⣿⣿⣿⣾⣿⣿⡿⠋⠁⠀⠀
-⠀⠀⠀⠀⠀⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠁⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠛⠛⠿⠿⠿⠿⠿⠿⠛⠋⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀
-╔══════════════════════════════════╗
-║☆          GITSCAN               ~║
-║          OSINT TOOL              ║
-║~   TARGET & EMAIL DISCOVERY     ☆║
-╚══════════════════════════════════╝
+  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣠⣤⣤⣶⣶⣶⣤⣤⣄⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+  ⠀⠀⠀⠀⠀⢀⣤⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣄⠀⠀⠀⠀⠀⠀
+  ⠀⠀⠀⣠⣶⣿⣿⡿⣿⣿⣿⡿⠋⠉⠀⠀⠉⠙⢿⣿⣿⡿⣿⣿⣷⣦⡀⠀⠀⠀
+  ⠀ ⣼⣿⣿⠟⠁⢠⣿⣿⠏⠀⠀⢠⣤⣤⡀⠀⠀⢻⣿⣿⡀⠙⢿⣿⣿⣦⠀⠀
+  ⣰⣿⣿⡟⠁⠀⠀⢸⣿⣿⠀⠀⠀⢿⣿⣿⡟⠀⠀⠈⣿⣿⡇⠀⠀⠙⣿⣿⣷⡄
+  ⠈⠻⣿⣿⣦⣄⠀⠸⣿⣿⣆⠀⠀⠀⠉⠉⠀⠀⠀⣸⣿⣿⠃⢀⣤⣾⣿⣿⠟⠁
+  ⠀⠀⠈⠻⣿⣿⣿⣶⣿⣿⣿⣦⣄⠀⠀⠀⢀⣠⣾⣿⣿⣿⣾⣿⣿⡿⠋⠁⠀⠀
+⠀⠀  ⠀⠀⠀⠙⠻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠁⠀⠀⠀⠀⠀
+⠀⠀⠀⠀  ⠀⠀⠀⠀⠈⠉⠛⠛⠿⠿⠿⠿⠿⠿⠛⠋⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀
+  ╔══════════════════════════════╗
+  ║☆          GITSCAN v1.0      ~║
+  ║       Enhanced OSINT Tool    ║
+  ║~   Advanced Email Discovery ☆║
+  ╚══════════════════════════════╝
         {Style.RESET_ALL}
         """
         print(banner)
@@ -74,24 +75,33 @@ class GitScan:
         
         while True:
             url = f"https://api.github.com/users/{username}/repos?page={page}&per_page={per_page}"
-            response = requests.get(url, headers=self.headers)
-            
-            if response.status_code == 200:
-                page_repos = response.json()
-                if not page_repos:
-                    break
+            try:
+                response = requests.get(url, headers=self.headers, timeout=30)
                 
-                repos.extend(page_repos)
-                self.log_info(f"Page {page}: Found {len(page_repos)} repositories")
-                
-                if len(page_repos) < per_page:
+                if response.status_code == 200:
+                    page_repos = response.json()
+                    if not page_repos:
+                        break
+                    
+                    repos.extend(page_repos)
+                    self.log_info(f"Page {page}: Found {len(page_repos)} repositories")
+                    
+                    if len(page_repos) < per_page:
+                        break
+                        
+                    page += 1
+                    time.sleep(0.5)
+                    
+                elif response.status_code == 403:
+                    self.log_error("Rate limit exceeded. Waiting 60 seconds...")
+                    time.sleep(60)
+                    continue
+                else:
+                    self.log_error(f"Error retrieving page {page}: {response.status_code}")
                     break
                     
-                page += 1
-                time.sleep(0.5)
-                
-            else:
-                self.log_error(f"Error retrieving page {page}: {response.status_code}")
+            except Exception as e:
+                self.log_error(f"Exception on page {page}: {e}")
                 break
         
         self.log_success(f"Total repositories found: {len(repos)}")
@@ -126,38 +136,47 @@ class GitScan:
         code_emails = self.scan_repo_code(username, repo_name)
         
         all_emails = commits_emails.union(code_emails)
+        
         with self.lock:
             self.found_data['emails'].update(all_emails)
         
-        self.scan_repo_contents(username, repo_name)
-        
-        return all_emails
+        return len(all_emails)
 
     def scan_repositories(self, username, repos):
         self.log_info(f"Analyzing {len(repos)} repositories with {self.threads} threads...")
         
-        emails_found = set()
+        total_emails_found = 0
+        completed_repos = 0
         
         with ThreadPoolExecutor(max_workers=self.threads) as executor:
-            args_list = [(username, repo, i+1, len(repos)) for i, repo in enumerate(repos)]
-            results = executor.map(self.scan_single_repo, args_list)
+            future_to_repo = {
+                executor.submit(self.scan_single_repo, (username, repo, i+1, len(repos))): repo 
+                for i, repo in enumerate(repos)
+            }
             
-            for result in results:
-                emails_found.update(result)
+            for future in as_completed(future_to_repo):
+                try:
+                    emails_found = future.result()
+                    total_emails_found += emails_found
+                    completed_repos += 1
+                    self.log_info(f"Progress: {completed_repos}/{len(repos)} repositories completed")
+                except Exception as e:
+                    self.log_error(f"Repository scan failed: {e}")
         
-        return repos
+        self.log_success(f"Repository scanning completed. Found {total_emails_found} emails total")
+        return total_emails_found
 
     def scan_repo_commits(self, username, repo_name):
         emails_found = set()
         
         try:
             commits_url = f"https://api.github.com/repos/{username}/{repo_name}/commits"
-            commits_response = requests.get(commits_url, headers=self.headers)
+            commits_response = requests.get(commits_url, headers=self.headers, timeout=30)
             
             if commits_response.status_code == 200:
                 commits = commits_response.json()
                 
-                for commit in commits[:50]:
+                for commit in commits[:100]:
                     commit_data = commit.get('commit', {})
                     author = commit_data.get('author', {})
                     committer = commit_data.get('committer', {})
@@ -180,17 +199,17 @@ class GitScan:
         
         try:
             search_url = f"https://api.github.com/search/code?q=user:{username}+repo:{username}/{repo_name}+%22@%22"
-            search_response = requests.get(search_url, headers=self.headers)
+            search_response = requests.get(search_url, headers=self.headers, timeout=30)
             
             if search_response.status_code == 200:
                 search_data = search_response.json()
                 
-                for item in search_data.get('items', [])[:10]:
+                for item in search_data.get('items', [])[:20]:
                     file_url = item['html_url']
                     raw_url = file_url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/')
                     
                     try:
-                        content_response = requests.get(raw_url)
+                        content_response = requests.get(raw_url, timeout=30)
                         if content_response.status_code == 200:
                             content = content_response.text
                             email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
@@ -208,149 +227,154 @@ class GitScan:
             
         return emails_found
 
-    def scan_repo_contents(self, username, repo_name):
-        try:
-            contents_url = f"https://api.github.com/repos/{username}/{repo_name}/contents"
-            contents_response = requests.get(contents_url, headers=self.headers)
-            
-            if contents_response.status_code == 200:
-                contents = contents_response.json()
-                
-        except Exception:
-            pass
-
     def get_user_info(self, username):
         self.log_info("Retrieving user information...")
         
         url = f"https://api.github.com/users/{username}"
-        response = requests.get(url, headers=self.headers)
-        
-        if response.status_code == 200:
-            user_data = response.json()
-            self.found_data['user_info'] = user_data
+        try:
+            response = requests.get(url, headers=self.headers, timeout=30)
             
-            self.log_success(f"User found: {user_data.get('login')}")
-            print(f"Name: {user_data.get('name', 'N/A')}")
-            print(f"Public Email: {user_data.get('email', 'N/A')}")
-            print(f"Company: {user_data.get('company', 'N/A')}")
-            print(f"Location: {user_data.get('location', 'N/A')}")
-            print(f"Blog/Website: {user_data.get('blog', 'N/A')}")
-            print(f"Bio: {user_data.get('bio', 'N/A')}")
-            print(f"Public Repos: {user_data.get('public_repos', 0)}")
-            print(f"Followers: {user_data.get('followers', 0)}")
-            print(f"Following: {user_data.get('following', 0)}")
-            print(f"Account Created: {user_data.get('created_at', 'N/A')}")
-            print(f"Last Updated: {user_data.get('updated_at', 'N/A')}")
-            
-            if user_data.get('email'):
-                self.found_data['emails'].add(user_data['email'])
+            if response.status_code == 200:
+                user_data = response.json()
+                self.found_data['user_info'] = user_data
                 
-            return user_data
-        else:
-            self.log_error(f"User not found: {response.status_code}")
+                self.log_success(f"User found: {user_data.get('login')}")
+                print(f"Name: {user_data.get('name', 'N/A')}")
+                print(f"Public Email: {user_data.get('email', 'N/A')}")
+                print(f"Company: {user_data.get('company', 'N/A')}")
+                print(f"Location: {user_data.get('location', 'N/A')}")
+                print(f"Blog/Website: {user_data.get('blog', 'N/A')}")
+                print(f"Bio: {user_data.get('bio', 'N/A')}")
+                print(f"Public Repos: {user_data.get('public_repos', 0)}")
+                print(f"Followers: {user_data.get('followers', 0)}")
+                print(f"Following: {user_data.get('following', 0)}")
+                print(f"Account Created: {user_data.get('created_at', 'N/A')}")
+                print(f"Last Updated: {user_data.get('updated_at', 'N/A')}")
+                
+                if user_data.get('email'):
+                    self.found_data['emails'].add(user_data['email'])
+                    
+                return user_data
+            else:
+                self.log_error(f"User not found: {response.status_code}")
+                return None
+        except Exception as e:
+            self.log_error(f"Error getting user info: {e}")
             return None
 
     def get_user_events(self, username):
         self.log_info("Analyzing recent activities...")
         
         url = f"https://api.github.com/users/{username}/events/public"
-        response = requests.get(url, headers=self.headers)
-        
-        if response.status_code == 200:
-            events = response.json()
-            self.log_success(f"Found {len(events)} public events")
+        try:
+            response = requests.get(url, headers=self.headers, timeout=30)
             
-            event_types = {}
-            for event in events[:20]:
-                event_type = event['type']
-                event_types[event_type] = event_types.get(event_type, 0) + 1
+            if response.status_code == 200:
+                events = response.json()
+                self.log_success(f"Found {len(events)} public events")
                 
-                self.found_data['events'].append({
-                    'type': event_type,
-                    'repo': event['repo']['name'] if 'repo' in event else 'N/A',
-                    'created_at': event['created_at']
-                })
-            
-            self.log_info("Event distribution:")
-            for event_type, count in event_types.items():
-                print(f"     {event_type}: {count}")
+                event_types = {}
+                for event in events[:50]:
+                    event_type = event['type']
+                    event_types[event_type] = event_types.get(event_type, 0) + 1
+                    
+                    self.found_data['events'].append({
+                        'type': event_type,
+                        'repo': event['repo']['name'] if 'repo' in event else 'N/A',
+                        'created_at': event['created_at']
+                    })
                 
-            return events
-        else:
-            self.log_error(f"Failed to retrieve events: {response.status_code}")
+                self.log_info("Event distribution:")
+                for event_type, count in event_types.items():
+                    print(f"     {event_type}: {count}")
+                    
+                return events
+            else:
+                self.log_error(f"Failed to retrieve events: {response.status_code}")
+                return []
+        except Exception as e:
+            self.log_error(f"Error getting events: {e}")
             return []
 
     def get_user_organizations(self, username):
         self.log_info("Checking organizations...")
         
         url = f"https://api.github.com/users/{username}/orgs"
-        response = requests.get(url, headers=self.headers)
-        
-        if response.status_code == 200:
-            orgs = response.json()
-            self.log_success(f"Found {len(orgs)} organizations")
+        try:
+            response = requests.get(url, headers=self.headers, timeout=30)
             
-            for org in orgs:
-                org_info = {
-                    'name': org['login'],
-                    'description': org.get('description', 'N/A')
-                }
-                self.found_data['organizations'].append(org_info)
-                print(f"   {org['login']}")
-            
-            return orgs
-        else:
-            self.log_warning("Failed to retrieve organization information")
+            if response.status_code == 200:
+                orgs = response.json()
+                self.log_success(f"Found {len(orgs)} organizations")
+                
+                for org in orgs:
+                    org_info = {
+                        'name': org['login'],
+                        'description': org.get('description', 'N/A')
+                    }
+                    self.found_data['organizations'].append(org_info)
+                    print(f"   {org['login']}")
+                
+                return orgs
+            else:
+                self.log_warning("Failed to retrieve organization information")
+                return []
+        except Exception as e:
+            self.log_error(f"Error getting organizations: {e}")
             return []
 
     def get_user_gists(self, username):
         self.log_info("Scanning gists...")
         
         url = f"https://api.github.com/users/{username}/gists"
-        response = requests.get(url, headers=self.headers)
-        
-        if response.status_code == 200:
-            gists = response.json()
-            self.log_success(f"Found {len(gists)} gists")
+        try:
+            response = requests.get(url, headers=self.headers, timeout=30)
             
-            for gist in gists[:5]:
-                gist_info = {
-                    'id': gist['id'],
-                    'description': gist.get('description', 'N/A'),
-                    'files': list(gist['files'].keys()),
-                    'created_at': gist['created_at']
-                }
-                self.found_data['gists'].append(gist_info)
-                print(f"   {gist['id']} - {len(gist['files'])} files")
-            
-            return gists
-        else:
-            self.log_warning("Failed to retrieve gists")
+            if response.status_code == 200:
+                gists = response.json()
+                self.log_success(f"Found {len(gists)} gists")
+                
+                for gist in gists[:10]:
+                    gist_info = {
+                        'id': gist['id'],
+                        'description': gist.get('description', 'N/A'),
+                        'files': list(gist['files'].keys()),
+                        'created_at': gist['created_at']
+                    }
+                    self.found_data['gists'].append(gist_info)
+                
+                return gists
+            else:
+                self.log_warning("Failed to retrieve gists")
+                return []
+        except Exception as e:
+            self.log_error(f"Error getting gists: {e}")
             return []
+
     def is_personal_email(self, email):
         corporate_domains = [
-         'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com', 'mail.com',
-         'protonmail.com', 'proton.me', 'tutanota.com', 'tuta.io', 'pm.me', 'protonmail.ch', 'tutanota.de',
-         'gmx.com', 'gmx.de', 'gmx.net', 'web.de', 'yandex.com', 'yandex.ru', 'mail.ru', 'rambler.ru', 'seznam.cz',
-         'fastmail.com', 'zoho.com', 'hushmail.com', 'keemail.me', 'orange.fr', 'free.fr', 'laposte.net', 'sfr.fr',
-         'libero.it', 'alice.it', 'virgilio.it', 'wp.pl', 'onet.pl', 'interia.pl', 'mail.ee', 'zone.ee',
-         'mail.hu', 'freemail.hu', 'azet.sk', 'zoznam.sk', 'email.cz', 'centrum.cz', 'bk.ru', 'inbox.ru', 'list.ru',
-         'disroot.org', 'riseup.net', 'cock.li', 'autistici.org', 'gmail.co.uk', 'yahoo.co.uk', 'hotmail.co.uk',
-         'gmail.de', 'yahoo.de', 'hotmail.de', 'gmail.fr', 'yahoo.fr', 'hotmail.fr', 'gmail.it', 'yahoo.it', 'hotmail.it',
-         'gmail.es', 'yahoo.es', 'hotmail.es', 'inbox.com', 'lycos.com', 'excite.com', 'hush.com', 'juno.com',
-         'earthlink.net', 'aim.com', 'btinternet.com', 'ntlworld.com', 'blueyonder.co.uk', 'talktalk.net',
-         'vtext.com', 'tmomail.net', 'messaging.sprintpcs.com', 'vmobl.com', 'mmst5.tracfone.com', 'mymetropcs.com',
-         'edu.com', 'alumni.', '.ac.', '.edu.'
-      ] 
+            'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com', 'mail.com',
+            'protonmail.com', 'proton.me', 'tutanota.com', 'tuta.io', 'pm.me', 'protonmail.ch', 'tutanota.de',
+            'gmx.com', 'gmx.de', 'gmx.net', 'web.de', 'yandex.com', 'yandex.ru', 'mail.ru', 'rambler.ru', 'seznam.cz',
+            'fastmail.com', 'zoho.com', 'hushmail.com', 'keemail.me', 'orange.fr', 'free.fr', 'laposte.net', 'sfr.fr',
+            'libero.it', 'alice.it', 'virgilio.it', 'wp.pl', 'onet.pl', 'interia.pl', 'mail.ee', 'zone.ee',
+            'mail.hu', 'freemail.hu', 'azet.sk', 'zoznam.sk', 'email.cz', 'centrum.cz', 'bk.ru', 'inbox.ru', 'list.ru',
+            'disroot.org', 'riseup.net', 'cock.li', 'autistici.org', 'gmail.co.uk', 'yahoo.co.uk', 'hotmail.co.uk',
+            'gmail.de', 'yahoo.de', 'hotmail.de', 'gmail.fr', 'yahoo.fr', 'hotmail.fr', 'gmail.it', 'yahoo.it', 'hotmail.it',
+            'gmail.es', 'yahoo.es', 'hotmail.es', 'inbox.com', 'lycos.com', 'excite.com', 'hush.com', 'juno.com',
+            'earthlink.net', 'aim.com', 'btinternet.com', 'ntlworld.com', 'blueyonder.co.uk', 'talktalk.net',
+            'vtext.com', 'tmomail.net', 'messaging.sprintpcs.com', 'vmobl.com', 'mmst5.tracfone.com', 'mymetropcs.com',
+            'edu.com'
+        ]
         domain = email.split('@')[-1].lower()
         return domain in corporate_domains
 
     def save_report(self, username):
-        filename = f"{username}.txt"
+        filename = f"{username}_report.txt"
         
         with open(filename, 'w', encoding='utf-8') as f:
             f.write("="*60 + "\n")
-            f.write("GITSCAN OSINT REPORT\n")
+            f.write("GITSCAN v1.0  OSINT REPORT\n")
             f.write("="*60 + "\n")
             
             f.write(f"\nTARGET: {username}\n")
@@ -372,7 +396,7 @@ class GitScan:
             
             f.write(f"\nFOUND EMAILS ({len(self.found_data['emails'])})\n")
             f.write("-" * 40 + "\n")
-            for email in self.found_data['emails']:
+            for email in sorted(self.found_data['emails']):
                 f.write(f"{email}\n")
             
             f.write(f"\nREPOSITORIES ({len(self.found_data['repos'])})\n")
@@ -393,7 +417,7 @@ class GitScan:
             
             f.write(f"\nRECENT ACTIVITIES ({len(self.found_data['events'])})\n")
             f.write("-" * 40 + "\n")
-            for event in self.found_data['events'][:10]:
+            for event in self.found_data['events'][:15]:
                 f.write(f"{event['type']} - {event['repo']} - {event['created_at']}\n")
             
             f.write(f"\nGISTS ({len(self.found_data['gists'])})\n")
@@ -410,7 +434,7 @@ class GitScan:
 
     def generate_report(self, username):
         print(f"\n" + "="*60)
-        print(f"{Fore.MAGENTA}GITSCAN OSINT REPORT{Style.RESET_ALL}")
+        print(f"{Fore.MAGENTA}GITSCAN v1.0 OSINT REPORT{Style.RESET_ALL}")
         print("="*60)
         
         print(f"\nTARGET: {username}")
@@ -418,7 +442,7 @@ class GitScan:
         
         print(f"\nFOUND EMAILS ({len(self.found_data['emails'])})")
         print("-" * 40)
-        for email in self.found_data['emails']:
+        for email in sorted(self.found_data['emails']):
             print(f"  {Fore.GREEN}{email}{Style.RESET_ALL}")
         
         print(f"\nREPOSITORIES ({len(self.found_data['repos'])})")
@@ -440,8 +464,10 @@ class GitScan:
     def run_scan(self, username, output_file=False):
         self.print_banner()
         
-        self.log_info(f"Starting GitScan: {username}")
+        self.log_info(f"Starting GitScan v1.0: {username}")
         print("="*50)
+        
+        start_time = time.time()
         
         all_repos = self.get_all_repos(username)
         
@@ -453,6 +479,9 @@ class GitScan:
         self.get_user_organizations(username)
         self.get_user_gists(username)
         
+        elapsed_time = time.time() - start_time
+        
+        self.log_success(f"Scan completed in {elapsed_time:.2f} seconds")
         self.generate_report(username)
         
         if output_file:
@@ -469,8 +498,8 @@ def main():
     args = parser.parse_args()
     
     if not args.token:
-        print(f"{Fore.MAGENTA}GitScan OSINT Tool v1.0{Style.RESET_ALL}")
-        token = "<= Your Github API Token =>" #Github API Token goes here
+        print(f"{Fore.MAGENTA}GitScan Enhanced OSINT Tool v2.0{Style.RESET_ALL}")
+        token = "<= YOUR GITHUB API TOKEN =>" #Your Github API token goes here (if u dont want to use the -t argument
     else:
         token = args.token
     
