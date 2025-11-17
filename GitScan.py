@@ -19,7 +19,7 @@ class GitScan:
         self.threads = threads
         self.headers = {
             'Authorization': f'token {token}',
-            'User-Agent': 'GitScan/1.0',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'application/vnd.github.v3+json'
         }
         self.found_data = {
@@ -327,13 +327,21 @@ class GitScan:
         else:
             self.log_warning("Failed to retrieve gists")
             return []
-
     def is_personal_email(self, email):
         corporate_domains = [
-            'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 
-            'protonmail.com', 'icloud.com', 'aol.com'
-        ]
-        
+         'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com', 'mail.com',
+         'protonmail.com', 'proton.me', 'tutanota.com', 'tuta.io', 'pm.me', 'protonmail.ch', 'tutanota.de',
+         'gmx.com', 'gmx.de', 'gmx.net', 'web.de', 'yandex.com', 'yandex.ru', 'mail.ru', 'rambler.ru', 'seznam.cz',
+         'fastmail.com', 'zoho.com', 'hushmail.com', 'keemail.me', 'orange.fr', 'free.fr', 'laposte.net', 'sfr.fr',
+         'libero.it', 'alice.it', 'virgilio.it', 'wp.pl', 'onet.pl', 'interia.pl', 'mail.ee', 'zone.ee',
+         'mail.hu', 'freemail.hu', 'azet.sk', 'zoznam.sk', 'email.cz', 'centrum.cz', 'bk.ru', 'inbox.ru', 'list.ru',
+         'disroot.org', 'riseup.net', 'cock.li', 'autistici.org', 'gmail.co.uk', 'yahoo.co.uk', 'hotmail.co.uk',
+         'gmail.de', 'yahoo.de', 'hotmail.de', 'gmail.fr', 'yahoo.fr', 'hotmail.fr', 'gmail.it', 'yahoo.it', 'hotmail.it',
+         'gmail.es', 'yahoo.es', 'hotmail.es', 'inbox.com', 'lycos.com', 'excite.com', 'hush.com', 'juno.com',
+         'earthlink.net', 'aim.com', 'btinternet.com', 'ntlworld.com', 'blueyonder.co.uk', 'talktalk.net',
+         'vtext.com', 'tmomail.net', 'messaging.sprintpcs.com', 'vmobl.com', 'mmst5.tracfone.com', 'mymetropcs.com',
+         'edu.com', 'alumni.', '.ac.', '.edu.'
+      ] 
         domain = email.split('@')[-1].lower()
         return domain in corporate_domains
 
@@ -462,7 +470,7 @@ def main():
     
     if not args.token:
         print(f"{Fore.MAGENTA}GitScan OSINT Tool v1.0{Style.RESET_ALL}")
-        token = "<=YOUR==TOKEN=>" #Put your github token here (if you dant want to use -t argument)
+        token = "<= Your Github API Token =>" #Github API Token goes here
     else:
         token = args.token
     
